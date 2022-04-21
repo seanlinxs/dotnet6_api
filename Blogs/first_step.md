@@ -133,11 +133,18 @@ A DTO(Data Transfer Object) may be used to:
 
 Add `LoginMemberDTO` class into `Member.cs`, this will be used as the incoming request object:
 ```C#
+public enum PreferredDevice
+{
+    Email,
+    Mobile
+}
+
 public class LoginMemberDTO
 {
-    public string Preferred { get; set; }
-    public string Email { get; set; }
-    public string Mobile { get; set; }
+    [Required]
+    public PreferredDevice Preferred { get; set; }
+    public string Email { get; set; } = null!;
+    public string Mobile { get; set; } = null!;
 }
 ```
 
@@ -294,7 +301,7 @@ Then the whole incoming object will be marked invalid:
 }
 ```
 
-## Add postgresql service
+## Add database access service
 [`Npgsql`](https://www.npgsql.org/index.html) is an open source ADO.NET Data Provider for PostgreSQL, it allows programs written in C#, Visual Basic, F# to access the PostgreSQL database server. It is implemented in 100% C# code, is free and is open source.
 
 Add `Npgsql` package:
@@ -403,3 +410,117 @@ Then register it in `Program.cs`:
 builder.Services.AddScoped<ICdpService, CdpService>();
 ...
 ```
+
+## Add authentication service
+OTP handler is a rewards authentication service hosted in APIGEE, API needs to call it to send a one time passcode to either mobile or email. At the same time, an OTPToken will be returned in this API call. Client can ask member to input one time passcode then send it back along with OTPToken to complete login process.
+
+Add `System.Net.Http.Json`:
+```
+dotnet add package System.Net.Http.Json
+```
+Add a model class `OTPRequestDTO` for calling OTP handler:
+```C#
+namespace wx_api_rewards_customer_hub.Models;
+
+public class OTPRequestDTO
+{
+    public string SendTo { get; set; } = null!;
+    public string? MobilePhone { get; set; }
+    public string? Email { get; set; }
+    public string? CRN { get; set; }
+    public string? FirstName { get; set; }
+
+    public OTPRequestDTO(LoginMemberDTO loginMemberDTO, LoginResultDTO loginResultDTO)
+    {
+        SendTo = loginMemberDTO.Preferred.ToString();
+        MobilePhone = loginResultDTO.Mobile;
+        Email = loginResultDTO.Email;
+        CRN = loginResultDTO.CRN;
+        FirstName = loginResultDTO.FirstName;
+    }
+}
+```
+Add another model class `OTPResponseDTO` for response:
+```C#
+namespace wx_api_rewards_customer_hub.Models;
+
+public class OTPResponseDTO
+{
+    public string? OTPToken { get; set; }
+}
+```
+Now add the service class and its interface:
+```C#
+using wx_api_rewards_customer_hub.Models;
+
+public interface IOtpSerivce
+{
+    Task<Response<OTPResponseDTO>?> SendOTP(OTPRequestDTO otpRequestDTO);
+}
+
+public class OtpService : IOtpSerivce
+{
+    private readonly IConfiguration _configuration;
+    private readonly HttpClient _client;
+
+    public OtpService(IConfiguration configuration)
+    {
+        _configuration = configuration;
+        _client = new HttpClient();
+        _client.DefaultRequestHeaders.Add("client_id", _configuration["MANDY_CLIENT_ID"]);
+    }
+
+    public async Task<Response<OTPResponseDTO>?> SendOTP(OTPRequestDTO otpRequestDTO)
+    {
+        var resp = await _client.PostAsJsonAsync(_configuration["OTP_HANDLER_CREATEOTP_URL"], otpRequestDTO);
+        resp.EnsureSuccessStatusCode();
+        
+        return await resp.Content.ReadFromJsonAsync<Response<OTPResponseDTO>>();
+    }
+}
+```
+Similar with `CdpService`, add `OtpService` into DI container in `Program.cs`:
+```C#
+...
+builder.Services.AddScoped<IOtpSerivce, OtpService>();
+...
+```
+Here is the final `CardsController` with injected `CdpService` and `OtpService`:
+```C#
+using Microsoft.AspNetCore.Mvc;
+using wx_api_rewards_customer_hub.Models;
+
+namespace wx_api_rewards_customer_hub.Controllers
+{
+    [Route("wx/v1/loyalty/rewards/customer-hub/[controller]/[action]")]
+    [ApiController]
+    public class CardsController : ControllerBase
+    {
+        private readonly ICdpService _cdp;
+        private readonly IOtpSerivce _otp;
+
+        public CardsController(ICdpService cdp, IOtpSerivce otp)
+        {
+            _cdp = cdp;
+            _otp = otp;
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<Response<OTPTokenDTO>>> Login(LoginMemberDTO loginMemberDTO)
+        {
+            var loginResultDTO = await _cdp.Login(loginMemberDTO);
+
+            if (loginResultDTO.Result == StoredProcedureResult.Success)
+            {
+                Response<OTPResponseDTO>? otpResponseDTO = await _otp.SendOTP(new OTPRequestDTO(loginMemberDTO, loginResultDTO));
+                return Created(string.Empty, otpResponseDTO);
+            }
+
+            return Unauthorized(new Error(loginResultDTO.ErrorCode, loginResultDTO.ErrorMessage));
+        }
+    }
+}
+```
+The contructor declares two dependecies, since the controller itself is in DI container, so these dependencies will be resolved automatically.
+
+The DI topic will be in it's own blog.
