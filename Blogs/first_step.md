@@ -66,7 +66,7 @@ The Swagger page `/swagger/index.html` is displayed. Select **GET** > **Try it o
 * A drop down list box with media types and the example value and schema.
 
 ## Use multiple environments
-The file `Properties/launchSettings.json` has multiple environmental settings for web server, launch url, etc. Here I created `dev` and `prod` environments, they both use Kestrel as web server, listen on port 3500, `dev` will launch browser and open swagger doc, `prod` will usually run by a linux docker container, so it does not launch browser. There is one more important difference between `Development` and `Production` profiles: exceptions will be replaced with "Internal Server Error" instread of detailed stack tracing logs when running `Production` profile.
+The file `Properties/launchSettings.json` has multiple environmental settings for web server, launch url, etc. Here I created `dev` and `prod` environments, they both use Kestrel as web server, listen on port 3500, `dev` will launch browser and open swagger doc, `prod` will usually run by a linux docker container, so it does not launch browser. There is one more important difference between `Development` and `Production` profiles: exceptions will be replaced with "Internal Server Error" instead of detailed stack tracing logs when running `Production` profile.
 
 ```
 "profiles": {
@@ -215,7 +215,7 @@ Change the routing line to `[Route("wx/v1/loyalty/rewards/customer-hub/[controll
 - Action method name will be used to match the `[Action]` component of the path.
 - All path components are case insensitive.
 
-## Generate a default `.gitignore` then initialise the git repo
+## Generate a default `.gitignore` then initialize the git repo
 ```
 dotnet new gitignore
 git init
@@ -243,7 +243,7 @@ public async Task<ActionResult<Response<OTPResponseDTO>>> Login(LoginMemberDTO l
     return Unauthorized(new Error(loginResultDTO.ErrorCode, loginResultDTO.ErrorMessage));
 }
 ```
-This action method reponds `POST /wx/v1/loyalty/rewards/customer-hub/cards/login` requests.
+This action method responds `POST /wx/v1/loyalty/rewards/customer-hub/cards/login` requests.
 It also:
 - Takes a `LoginMemberDTO` object.
 - Returns a `Response<OTPResponseDTO>>` object.
@@ -349,7 +349,7 @@ Create Development environment database connection parameters in `appsettings.De
 ```
 The next step is to add a service class `CdpService` and inject into controller `CardsController`, please refer to the [DI](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection?view=aspnetcore-6.0) document for details.
 
-ADO.NET wil be dicussed in its own blog(*TODO*), for now, simply create a `Services` folder, then create a file `CdpService.cs` underneath:
+ADO.NET wil be discussed in its own blog(*TODO*), for now, simply create a `Services` folder, then create a file `CdpService.cs` underneath:
 ```C#
 using Npgsql;
 using wx_api_rewards_customer_hub.Models;
@@ -478,12 +478,12 @@ Now add the service class and its interface:
 ```C#
 using wx_api_rewards_customer_hub.Models;
 
-public interface IOtpSerivce
+public interface IOtpService
 {
     Task<Response<OTPResponseDTO>?> SendOTP(OTPRequestDTO otpRequestDTO);
 }
 
-public class OtpService : IOtpSerivce
+public class OtpService : IOtpService
 {
     private readonly IConfiguration _configuration;
     private readonly HttpClient _client;
@@ -507,7 +507,7 @@ public class OtpService : IOtpSerivce
 Register `OtpService` into DI container in `Program.cs`:
 ```C#
 ...
-builder.Services.AddScoped<IOtpSerivce, OtpService>();
+builder.Services.AddScoped<IOtpService, OtpService>();
 ...
 ```
 Here is the final `CardsController` with injected `CdpService` and `OtpService`:
@@ -522,9 +522,9 @@ namespace wx_api_rewards_customer_hub.Controllers
     public class CardsController : ControllerBase
     {
         private readonly ICdpService _cdp;
-        private readonly IOtpSerivce _otp;
+        private readonly IOtpService _otp;
 
-        public CardsController(ICdpService cdp, IOtpSerivce otp)
+        public CardsController(ICdpService cdp, IOtpService otp)
         {
             _cdp = cdp;
             _otp = otp;
